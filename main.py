@@ -1,11 +1,17 @@
 import os
 import json
 import requests
+# pyrefly: ignore [missing-import]
 from fastapi import FastAPI, File, UploadFile, Request
+# pyrefly: ignore [missing-import]
 from fastapi.responses import JSONResponse, FileResponse
+# pyrefly: ignore [missing-import]
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-import fitz  # PyMuPDF
+# pyrefly: ignore [missing-import]
+from fastapi.middleware.cors import CORSMiddleware  
+# pyrefly: ignore [missing-import]
+import fitz  # PyMuPDF 
+# pyrefly: ignore [missing-import]
 from docx import Document
 
 app = FastAPI()
@@ -22,6 +28,10 @@ app.add_middleware(
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs("static", exist_ok=True)
+
+# Define which system prompt file to use. 
+# Options: "vulnerable_system_prompt.txt", "secure_system_prompt.txt", or None
+ACTIVE_PROMPT_FILE = "vulnerable_system_prompt.txt"
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -70,6 +80,15 @@ async def chat_endpoint(request: Request):
     data = await request.json()
     messages = data.get("messages", [])
     
+    # Inject the system prompt if one is configured
+    if ACTIVE_PROMPT_FILE and os.path.exists(ACTIVE_PROMPT_FILE):
+        with open(ACTIVE_PROMPT_FILE, "r", encoding="utf-8") as f:
+            system_prompt = f.read()
+        
+        # Check if a system prompt already exists in the messages, if not, prepend it
+        if not any(msg.get("role") == "system" for msg in messages):
+            messages.insert(0, {"role": "system", "content": system_prompt})
+
     # Forward directly to Ollama API
     ollama_url = "http://localhost:11434/api/chat"
     payload = {
