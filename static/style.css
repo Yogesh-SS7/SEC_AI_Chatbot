@@ -243,3 +243,106 @@ textarea {
     0%, 80%, 100% { transform: scale(0); }
     40% { transform: scale(1); }
 }
+
+/* ── Login Card (standalone login.html page) ──────────────────────────────── */
+.login-card {
+    background: rgba(30, 41, 59, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 40px 36px;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(59, 130, 246, 0.15);
+}
+
+.login-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-color);
+    margin-bottom: 6px;
+}
+
+.login-subtitle {
+    font-size: 0.85rem;
+    color: var(--secondary-color);
+    margin-bottom: 28px;
+}
+
+.login-field {
+    margin-bottom: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.login-field label {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--secondary-color);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.login-field input {
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text-color);
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.login-field input:focus {
+    border-color: var(--primary-color);
+}
+
+.login-error {
+    font-size: 0.82rem;
+    color: #f87171;
+    min-height: 18px;
+    margin-bottom: 10px;
+}
+
+.login-btn {
+    width: 100%;
+    padding: 11px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+}
+
+.login-btn:hover  { background: var(--primary-hover); }
+.login-btn:active { transform: scale(0.98); }
+.login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ── Header actions (upload + logout grouped) ─────────────────────────────── */
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.logout-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 7px 9px;
+    color: var(--secondary-color);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition: color 0.2s, border-color 0.2s;
+}
+
+.logout-btn:hover {
+    color: #f87171;
+    border-color: #f87171;
+}
+

@@ -29,5 +29,14 @@ ACTIVE_PROMPT_FILE: str = os.getenv("ACTIVE_PROMPT_FILE", "secure_system_prompt.
 HOST: str = os.getenv("HOST", "0.0.0.0")
 PORT: int = int(os.getenv("PORT", "8000"))
 
+# ── JWT Authentication ─────────────────────────────────────────────────────────
+JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")
+JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
+JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
+
+# ── App Credentials ────────────────────────────────────────────────────────────
+APP_USERNAME: str = os.getenv("APP_USERNAME", "")
+APP_PASSWORD: str = os.getenv("APP_PASSWORD", "")
+
 # ── Logging ────────────────────────────────────────────────────────────────────
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()

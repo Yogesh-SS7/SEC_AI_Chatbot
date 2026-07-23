@@ -1,23 +1,41 @@
-const chatHistory = document.getElementById('chat-history');
-const userInput = document.getElementById('user-input');
-const sendBtn = document.getElementById('send-btn');
-const fileUpload = document.getElementById('file-upload');
+// ── Guard: redirect to login if no token ─────────────────────────────────────
+const accessToken = localStorage.getItem('access_token');
+if (!accessToken) {
+    window.location.replace('/');
+}
+
+// ── UI element references ────────────────────────────────────────────────────
+const chatHistory     = document.getElementById('chat-history');
+const userInput       = document.getElementById('user-input');
+const sendBtn         = document.getElementById('send-btn');
+const fileUpload      = document.getElementById('file-upload');
 const fileNameDisplay = document.getElementById('file-name');
+const logoutBtn       = document.getElementById('logout-btn');
 
-// Conversation history for the current session
-let messages = [];
+// ── Conversation state ────────────────────────────────────────────────────────
+let messages    = [];
+let fileContext = '';
 
-// Context extracted from a file
-let fileContext = "";
+// ── Auth helpers ─────────────────────────────────────────────────────────────
+function authHeaders() {
+    return { 'Authorization': `Bearer ${accessToken}` };
+}
 
-// Auto-resize textarea
-userInput.addEventListener('input', function() {
+function logout() {
+    localStorage.removeItem('access_token');
+    window.location.replace('/');
+}
+
+logoutBtn.addEventListener('click', logout);
+
+// ── Auto-resize textarea ─────────────────────────────────────────────────────
+userInput.addEventListener('input', function () {
     this.style.height = 'auto';
     this.style.height = (this.scrollHeight) + 'px';
 });
 
-// Handle enter key to send
-userInput.addEventListener('keydown', function(e) {
+// Handle Enter key to send
+userInput.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendMessage();
@@ -26,21 +44,27 @@ userInput.addEventListener('keydown', function(e) {
 
 sendBtn.addEventListener('click', sendMessage);
 
-// Handle file upload
-fileUpload.addEventListener('change', async function(e) {
+// ── File upload ───────────────────────────────────────────────────────────────
+fileUpload.addEventListener('change', async function (e) {
     const file = e.target.files[0];
     if (!file) return;
 
-    fileNameDisplay.textContent = 'Uploading...';
-    
+    fileNameDisplay.textContent = 'Uploading…';
+
     const formData = new FormData();
     formData.append('file', file);
 
     try {
         const response = await fetch('/upload', {
             method: 'POST',
+            headers: authHeaders(),
             body: formData
         });
+
+        if (response.status === 401 || response.status === 403) {
+            logout();
+            return;
+        }
 
         if (!response.ok) throw new Error('Upload failed');
 
@@ -48,24 +72,23 @@ fileUpload.addEventListener('change', async function(e) {
         fileContext = data.extracted_text;
         fileNameDisplay.textContent = data.filename;
     } catch (error) {
-        console.error('Error:', error);
+        console.error('Upload error:', error);
         fileNameDisplay.textContent = 'Upload failed';
-        fileContext = "";
+        fileContext = '';
     }
 });
 
+// ── Message UI helpers ────────────────────────────────────────────────────────
 function addMessageToUI(content, isUser) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${isUser ? 'user-message' : 'ai-message'}`;
-    
+
     const contentDiv = document.createElement('div');
     contentDiv.className = 'message-content';
-    contentDiv.textContent = content; // Using textContent to avoid raw HTML injection (XSS)
+    contentDiv.textContent = content; // textContent prevents XSS
 
     messageDiv.appendChild(contentDiv);
     chatHistory.appendChild(messageDiv);
-    
-    // Auto-scroll
     chatHistory.scrollTop = chatHistory.scrollHeight;
 }
 
@@ -73,16 +96,15 @@ function showLoading() {
     const loadingDiv = document.createElement('div');
     loadingDiv.className = 'message ai-message';
     loadingDiv.id = 'loading-indicator';
-    
+
     const indicator = document.createElement('div');
     indicator.className = 'typing-indicator';
-    
     indicator.innerHTML = `
         <div class="dot"></div>
         <div class="dot"></div>
         <div class="dot"></div>
     `;
-    
+
     loadingDiv.appendChild(indicator);
     chatHistory.appendChild(loadingDiv);
     chatHistory.scrollTop = chatHistory.scrollHeight;
@@ -90,42 +112,33 @@ function showLoading() {
 
 function removeLoading() {
     const indicator = document.getElementById('loading-indicator');
-    if (indicator) {
-        indicator.remove();
-    }
+    if (indicator) indicator.remove();
 }
 
+// ── Send message ──────────────────────────────────────────────────────────────
 async function sendMessage() {
     const text = userInput.value.trim();
     if (!text && !fileContext) return;
 
-    // Build the user message content
     let fullContent = text;
     if (fileContext) {
         fullContent += `\n\n[Context from uploaded file:]\n${fileContext}`;
     }
 
-    // Add to UI (only show user text, not the huge context)
     if (text) {
         addMessageToUI(text, true);
     } else {
         addMessageToUI(`[Sent file: ${fileNameDisplay.textContent}]`, true);
     }
 
-    // Add to conversation history
-    messages.push({
-        role: 'user',
-        content: fullContent
-    });
+    messages.push({ role: 'user', content: fullContent });
 
-    // Clear inputs
     userInput.value = '';
     userInput.style.height = 'auto';
     fileUpload.value = '';
     fileNameDisplay.textContent = '';
     fileContext = '';
-    
-    // Disable send button while processing
+
     sendBtn.disabled = true;
     showLoading();
 
@@ -133,31 +146,31 @@ async function sendMessage() {
         const response = await fetch('/chat', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                ...authHeaders()
             },
-            body: JSON.stringify({ messages: messages })
+            body: JSON.stringify({ messages })
         });
+
+        if (response.status === 401 || response.status === 403) {
+            removeLoading();
+            logout();
+            return;
+        }
 
         if (!response.ok) throw new Error('Network response was not ok');
 
         const data = await response.json();
         const aiResponse = data.message.content;
 
-        // Add AI response to history
-        messages.push({
-            role: 'assistant',
-            content: aiResponse
-        });
-
+        messages.push({ role: 'assistant', content: aiResponse });
         removeLoading();
         addMessageToUI(aiResponse, false);
 
     } catch (error) {
-        console.error('Error:', error);
+        console.error('Chat error:', error);
         removeLoading();
         addMessageToUI('Sorry, I encountered an error. Is Ollama running?', false);
-        
-        // Remove the last message from history since it failed
         messages.pop();
     } finally {
         sendBtn.disabled = false;
