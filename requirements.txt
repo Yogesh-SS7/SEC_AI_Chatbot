@@ -6,3 +6,4 @@ PyMuPDF
 python-docx
 python-dotenv
 python-jose[cryptography]
+slowapi

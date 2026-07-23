@@ -40,3 +40,21 @@ APP_PASSWORD: str = os.getenv("APP_PASSWORD", "")
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
+
+# ── Phase 3: Abuse Prevention ──────────────────────────────────────────────────
+# Rate limits (slowapi format: "N/period")
+RATE_LIMIT_CHAT: str  = os.getenv("RATE_LIMIT_CHAT",  "10/minute")
+RATE_LIMIT_UPLOAD: str = os.getenv("RATE_LIMIT_UPLOAD", "5/minute")
+RATE_LIMIT_TOKEN: str  = os.getenv("RATE_LIMIT_TOKEN",  "5/minute")
+
+# Maximum raw HTTP body size accepted by the server (bytes)
+MAX_REQUEST_SIZE_BYTES: int = int(os.getenv("MAX_REQUEST_SIZE_BYTES", "5767168"))  # 5.5 MB
+
+# Maximum characters allowed in a single user prompt
+MAX_PROMPT_CHARS: int = int(os.getenv("MAX_PROMPT_CHARS", "4000"))
+
+# Maximum characters returned from the AI response
+MAX_RESPONSE_CHARS: int = int(os.getenv("MAX_RESPONSE_CHARS", "8000"))
+
+# Ollama HTTP timeout (seconds)
+OLLAMA_TIMEOUT: int = int(os.getenv("OLLAMA_TIMEOUT", "60"))
