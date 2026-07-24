@@ -31,11 +31,20 @@ Phase 5 hardening applied:
   ✅ System prompt enforcement (strip client system-role, lock server prompt)
   ✅ AI firewall middleware (pre/post-process all AI I/O via ai_firewall.py)
   ✅ Context isolation for uploaded documents (wrapped with delimiters)
+
+Phase 6 hardening applied:
+  ✅ Security headers middleware (CSP, X-Frame-Options, HSTS, Referrer-Policy, etc.)
+  ✅ Restricted CORS (whitelist via CORS_ALLOWED_ORIGINS)
+  ✅ Pydantic input validation on /chat (ChatRequest model)
+  ✅ Output encoding (html.escape on AI responses)
 """
 
 import os
 import uuid
+import html
 import requests
+# pyrefly: ignore [missing-import]
+from pydantic import BaseModel
 # pyrefly: ignore [missing-import]
 import magic  # python-magic-bin (Windows) / python-magic (Linux)
 
@@ -70,6 +79,7 @@ from config import (
     ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES,
     AI_FIREWALL_ENABLED, INJECTION_DETECTION_ENABLED,
     INDIRECT_INJECTION_ENABLED, OUTPUT_SANITIZATION_ENABLED,
+    CORS_ALLOWED_ORIGINS, HSTS_ENABLED,
 )
 # pyrefly: ignore [missing-import]
 from ai_firewall import (
@@ -92,7 +102,7 @@ app = FastAPI()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# ── Request size limit middleware ──────────────────────────────────────────────
+# ── Phase 3: Request size limit middleware ────────────────────────────────────
 class ContentSizeLimitMiddleware(BaseHTTPMiddleware):
     """Reject requests whose body exceeds MAX_REQUEST_SIZE_BYTES."""
 
@@ -109,14 +119,48 @@ class ContentSizeLimitMiddleware(BaseHTTPMiddleware):
             )
         return await call_next(request)
 
-# Register middlewares (order matters: size check runs before CORS)
+
+# ── Phase 6: Security headers middleware ──────────────────────────────────────
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Inject security headers on every response."""
+
+    # Content Security Policy — strict but compatible with the existing static UI
+    _CSP = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none';"
+    )
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "0"          # CSP is the right tool
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        response.headers["Content-Security-Policy"] = self._CSP
+        if HSTS_ENABLED:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+
+# ── Phase 6: Pydantic input model for /chat ───────────────────────────────────
+class ChatRequest(BaseModel):
+    messages: list[dict]
+
+
+# Register middlewares (outermost first — SecurityHeaders wraps everything)
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(ContentSizeLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # tightened in Phase 6
+    allow_origins=CORS_ALLOWED_ORIGINS,   # Phase 6: whitelist only
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["POST", "GET", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Ensure required directories exist
@@ -305,15 +349,10 @@ async def upload_file(
 @limiter.limit(RATE_LIMIT_CHAT)
 async def chat_endpoint(
     request: Request,
+    body: ChatRequest,                    # Phase 6: Pydantic validation
     current_user: str = Depends(verify_token),
 ):
-    try:
-        data = await request.json()
-    except Exception:
-        log.warning("Malformed JSON body received on /chat")
-        return JSONResponse(status_code=400, content={"error": "Invalid JSON body."})
-
-    messages = data.get("messages", [])
+    messages = body.messages
 
     # ── Prompt length limit ────────────────────────────────────────────────────
     for msg in messages:
@@ -386,6 +425,9 @@ async def chat_endpoint(
         # -- Phase 5: Output sanitization (leakage + XSS prevention) ----------
         if AI_FIREWALL_ENABLED and OUTPUT_SANITIZATION_ENABLED:
             ai_content = sanitize_output(ai_content)
+
+        # -- Phase 6: Output encoding (HTML-escape before sending to client) --
+        ai_content = html.escape(ai_content)
 
         result["message"]["content"] = ai_content
         log.info("Ollama response received", extra={"status_code": response.status_code})

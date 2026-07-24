@@ -92,3 +92,15 @@ INDIRECT_INJECTION_ENABLED: bool = os.getenv("INDIRECT_INJECTION_ENABLED", "true
 
 # Post-process AI output for leakage signals and unsafe HTML
 OUTPUT_SANITIZATION_ENABLED: bool = os.getenv("OUTPUT_SANITIZATION_ENABLED", "true").lower() == "true"
+
+# -- Phase 6: Web Security --------------------------------------------------
+# Comma-separated list of allowed CORS origins
+# Production: replace with your deployed frontend domain, e.g. https://orion.yourcompany.com
+_raw_cors_origins = os.getenv(
+    "CORS_ALLOWED_ORIGINS",
+    "http://localhost:8000,http://127.0.0.1:8000"
+)
+CORS_ALLOWED_ORIGINS: list[str] = [o.strip() for o in _raw_cors_origins.split(",")]
+
+# Enable Strict-Transport-Security header (set to false when running plain HTTP locally)
+HSTS_ENABLED: bool = os.getenv("HSTS_ENABLED", "false").lower() == "true"
