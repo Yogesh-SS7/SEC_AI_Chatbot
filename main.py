@@ -24,6 +24,13 @@ Phase 4 hardening applied:
   ✅ Per-file size limit (MAX_UPLOAD_SIZE_BYTES, default 5 MB)
   ✅ UUID filenames (original filename never touches filesystem)
   ✅ Safe storage path (absolute path + traversal guard)
+
+Phase 5 hardening applied:
+  ✅ Direct prompt injection detection (regex patterns on user messages)
+  ✅ Indirect prompt injection detection (scan extracted document text)
+  ✅ System prompt enforcement (strip client system-role, lock server prompt)
+  ✅ AI firewall middleware (pre/post-process all AI I/O via ai_firewall.py)
+  ✅ Context isolation for uploaded documents (wrapped with delimiters)
 """
 
 import os
@@ -61,6 +68,16 @@ from config import (
     RATE_LIMIT_CHAT, RATE_LIMIT_UPLOAD, RATE_LIMIT_TOKEN,
     MAX_REQUEST_SIZE_BYTES, MAX_PROMPT_CHARS, MAX_RESPONSE_CHARS, OLLAMA_TIMEOUT,
     ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES,
+    AI_FIREWALL_ENABLED, INJECTION_DETECTION_ENABLED,
+    INDIRECT_INJECTION_ENABLED, OUTPUT_SANITIZATION_ENABLED,
+)
+# pyrefly: ignore [missing-import]
+from ai_firewall import (
+    scan_for_injection,
+    scan_document_text,
+    enforce_system_prompt,
+    wrap_document_context,
+    sanitize_output,
 )
 from logger import log
 from auth import create_access_token, verify_token
@@ -257,6 +274,27 @@ async def upload_file(
                                                        "error": str(exc)})
             extracted_text = "Could not extract text from the document."
 
+    # -- Phase 5: Indirect injection scan + context isolation ----------------
+    if AI_FIREWALL_ENABLED and INDIRECT_INJECTION_ENABLED and extracted_text:
+        flagged, pattern_label = scan_document_text(extracted_text)
+        if flagged:
+            log.warning(
+                "Document rejected: indirect injection detected",
+                extra={"upload_filename": original_filename, "pattern": pattern_label},
+            )
+            # Clean up the stored file so the malicious doc is not retained
+            try:
+                file_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return JSONResponse(
+                status_code=400,
+                content={"error": "The uploaded document contains content that violates "
+                                  "security policy and cannot be processed."},
+            )
+        # Wrap extracted text in delimiters for context isolation
+        extracted_text = wrap_document_context(extracted_text)
+
     log.info("File processed successfully", extra={"upload_filename": original_filename,
                                                     "chars_extracted": len(extracted_text)})
     # Return original filename to the client (UX), not the internal UUID name
@@ -292,16 +330,39 @@ async def chat_endpoint(
 
     log.info("Chat request received", extra={"message_count": len(messages)})
 
-    # Inject the system prompt if one is configured
+    # -- Phase 5: Direct injection scan (user messages only) -----------------
+    if AI_FIREWALL_ENABLED and INJECTION_DETECTION_ENABLED:
+        for msg in messages:
+            if msg.get("role") == "user":
+                flagged, pattern_label = scan_for_injection(msg.get("content", ""))
+                if flagged:
+                    log.warning(
+                        "Direct injection attempt blocked",
+                        extra={"user": current_user, "pattern": pattern_label},
+                    )
+                    return JSONResponse(
+                        status_code=400,
+                        content={"error": "Your message was flagged as a potential "
+                                          "security risk and could not be processed."},
+                    )
+
+    # -- Phase 5: Load system prompt + enforce server-side control -----------
+    system_prompt = ""
     if ACTIVE_PROMPT_FILE and os.path.exists(ACTIVE_PROMPT_FILE):
         try:
             with open(ACTIVE_PROMPT_FILE, "r", encoding="utf-8") as f:
                 system_prompt = f.read()
-            if not any(msg.get("role") == "system" for msg in messages):
-                messages.insert(0, {"role": "system", "content": system_prompt})
         except OSError as exc:
             log.error("Could not load system prompt", extra={"file": ACTIVE_PROMPT_FILE,
                                                               "error": str(exc)})
+
+    if AI_FIREWALL_ENABLED:
+        # Strip any client-injected system roles and lock server prompt as first message
+        messages = enforce_system_prompt(messages, system_prompt)
+    else:
+        # Fallback: legacy behaviour (insert only if no system message present)
+        if system_prompt and not any(m.get("role") == "system" for m in messages):
+            messages.insert(0, {"role": "system", "content": system_prompt})
 
     payload = {
         "model": MODEL_NAME,
@@ -314,14 +375,19 @@ async def chat_endpoint(
         response.raise_for_status()
         result = response.json()
 
-        # ── Response length limit ──────────────────────────────────────────────
+        # -- Phase 3: Response length limit -----------------------------------
         ai_content = result.get("message", {}).get("content", "")
         if len(ai_content) > MAX_RESPONSE_CHARS:
             log.warning("AI response truncated",
                         extra={"original_len": len(ai_content),
                                "limit": MAX_RESPONSE_CHARS})
-            result["message"]["content"] = ai_content[:MAX_RESPONSE_CHARS] + "\n\n[Response truncated]"
+            ai_content = ai_content[:MAX_RESPONSE_CHARS] + "\n\n[Response truncated]"
 
+        # -- Phase 5: Output sanitization (leakage + XSS prevention) ----------
+        if AI_FIREWALL_ENABLED and OUTPUT_SANITIZATION_ENABLED:
+            ai_content = sanitize_output(ai_content)
+
+        result["message"]["content"] = ai_content
         log.info("Ollama response received", extra={"status_code": response.status_code})
         return result
 

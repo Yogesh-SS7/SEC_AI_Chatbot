@@ -77,5 +77,18 @@ ALLOWED_MIME_TYPES: set = {mime.strip() for mime in os.getenv(
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 ).split(",")}
 
-# Maximum size for a single uploaded file (bytes) — default 5 MB
+# Maximum size for a single uploaded file (bytes) -- default 5 MB
 MAX_UPLOAD_SIZE_BYTES: int = int(os.getenv("MAX_UPLOAD_SIZE_BYTES", str(5 * 1024 * 1024)))
+
+# -- Phase 5: AI Security --------------------------------------------------
+# Master toggle -- set to False to disable ALL firewall checks (demo / debug only)
+AI_FIREWALL_ENABLED: bool = os.getenv("AI_FIREWALL_ENABLED", "true").lower() == "true"
+
+# Scan user messages for direct prompt injection patterns
+INJECTION_DETECTION_ENABLED: bool = os.getenv("INJECTION_DETECTION_ENABLED", "true").lower() == "true"
+
+# Scan extracted document text for indirect prompt injection
+INDIRECT_INJECTION_ENABLED: bool = os.getenv("INDIRECT_INJECTION_ENABLED", "true").lower() == "true"
+
+# Post-process AI output for leakage signals and unsafe HTML
+OUTPUT_SANITIZATION_ENABLED: bool = os.getenv("OUTPUT_SANITIZATION_ENABLED", "true").lower() == "true"
