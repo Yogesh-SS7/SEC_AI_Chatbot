@@ -3,6 +3,11 @@ config.py — Centralized application configuration.
 
 All settings are loaded from environment variables (populated by .env via
 python-dotenv).  No raw strings or magic values should appear in main.py.
+
+Phase 4 hardening applied:
+  ✅ Extension whitelist (ALLOWED_EXTENSIONS)
+  ✅ MIME type whitelist (ALLOWED_MIME_TYPES)
+  ✅ Per-file size limit (MAX_UPLOAD_SIZE_BYTES)
 """
 
 import os
@@ -58,3 +63,19 @@ MAX_RESPONSE_CHARS: int = int(os.getenv("MAX_RESPONSE_CHARS", "8000"))
 
 # Ollama HTTP timeout (seconds)
 OLLAMA_TIMEOUT: int = int(os.getenv("OLLAMA_TIMEOUT", "60"))
+
+# ── Phase 4: File Security ─────────────────────────────────────────────────────
+# Permitted file extensions (lowercase, dot-prefixed)
+ALLOWED_EXTENSIONS: set = {ext.strip() for ext in
+    os.getenv("ALLOWED_EXTENSIONS", ".txt,.pdf,.docx").split(",")}
+
+# Permitted MIME types (must match actual file content, not just extension)
+ALLOWED_MIME_TYPES: set = {mime.strip() for mime in os.getenv(
+    "ALLOWED_MIME_TYPES",
+    "text/plain,"
+    "application/pdf,"
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+).split(",")}
+
+# Maximum size for a single uploaded file (bytes) — default 5 MB
+MAX_UPLOAD_SIZE_BYTES: int = int(os.getenv("MAX_UPLOAD_SIZE_BYTES", str(5 * 1024 * 1024)))

@@ -17,10 +17,20 @@ Phase 3 hardening applied:
   ✅ Prompt length limit (MAX_PROMPT_CHARS per message)
   ✅ Response length limit (MAX_RESPONSE_CHARS truncation)
   ✅ Configurable Ollama timeout (OLLAMA_TIMEOUT)
+
+Phase 4 hardening applied:
+  ✅ Extension whitelist (.txt, .pdf, .docx only)
+  ✅ MIME type validation (python-magic, content-based)
+  ✅ Per-file size limit (MAX_UPLOAD_SIZE_BYTES, default 5 MB)
+  ✅ UUID filenames (original filename never touches filesystem)
+  ✅ Safe storage path (absolute path + traversal guard)
 """
 
 import os
+import uuid
 import requests
+# pyrefly: ignore [missing-import]
+import magic  # python-magic-bin (Windows) / python-magic (Linux)
 
 # pyrefly: ignore [missing-import]
 from fastapi import FastAPI, File, Form, UploadFile, Request, Depends
@@ -50,6 +60,7 @@ from config import (
     APP_USERNAME, APP_PASSWORD,
     RATE_LIMIT_CHAT, RATE_LIMIT_UPLOAD, RATE_LIMIT_TOKEN,
     MAX_REQUEST_SIZE_BYTES, MAX_PROMPT_CHARS, MAX_RESPONSE_CHARS, OLLAMA_TIMEOUT,
+    ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES,
 )
 from logger import log
 from auth import create_access_token, verify_token
@@ -145,57 +156,111 @@ async def upload_file(
     file: UploadFile = File(...),
     current_user: str = Depends(verify_token),
 ):
-    log.info("File upload received", extra={"upload_filename": file.filename,
+    original_filename = file.filename or ""
+    log.info("File upload received", extra={"upload_filename": original_filename,
                                             "content_type": file.content_type})
 
-    # Save the file — further security checks come in Phase 4
-    file_path = UPLOAD_DIR / file.filename  # type: ignore[operator]
+    # ── 1. Extension whitelist ─────────────────────────────────────────────────────
+    from pathlib import Path as _Path
+    file_ext = _Path(original_filename).suffix.lower()
+    if file_ext not in ALLOWED_EXTENSIONS:
+        log.warning("Upload rejected: disallowed extension",
+                    extra={"upload_filename": original_filename, "extension": file_ext})
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Unsupported file type '{file_ext}'. "
+                              f"Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}"},
+        )
 
+    # ── 2. Read into memory (needed for size + MIME checks) ────────────────────────
+    contents = await file.read()
+
+    # ── 3. Per-file size limit ──────────────────────────────────────────────────
+    if len(contents) > MAX_UPLOAD_SIZE_BYTES:
+        log.warning("Upload rejected: file too large",
+                    extra={"upload_filename": original_filename,
+                           "size_bytes": len(contents),
+                           "limit_bytes": MAX_UPLOAD_SIZE_BYTES})
+        return JSONResponse(
+            status_code=413,
+            content={"error": f"File too large. Maximum allowed size is "
+                              f"{MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)} MB."},
+        )
+
+    # ── 4. MIME type validation (content-based, not extension-based) ───────────────
+    detected_mime = magic.from_buffer(contents, mime=True)
+    if detected_mime not in ALLOWED_MIME_TYPES:
+        log.warning("Upload rejected: disallowed MIME type",
+                    extra={"upload_filename": original_filename,
+                           "detected_mime": detected_mime})
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Invalid file content (detected: '{detected_mime}'). "
+                              f"Only plain text, PDF, and DOCX files are accepted."},
+        )
+
+    # ── 5. UUID filename + safe storage path (traversal guard) ───────────────────
+    safe_name = uuid.uuid4().hex + file_ext          # e.g. a3f9...e1.txt
+    file_path = (UPLOAD_DIR / safe_name).resolve()   # absolute path
+
+    # Belt-and-suspenders: ensure resolved path stays inside UPLOAD_DIR
+    if file_path.parent != UPLOAD_DIR.resolve():
+        log.error("Path traversal attempt detected",
+                  extra={"upload_filename": original_filename,
+                         "resolved_path": str(file_path)})
+        return JSONResponse(status_code=400, content={"error": "Invalid file path."})
+
+    # ── Write validated file to disk ───────────────────────────────────────────────
     try:
-        contents = await file.read()
         with open(file_path, "wb") as f:
             f.write(contents)
     except OSError as exc:
-        log.error("Failed to save uploaded file", extra={"upload_filename": file.filename,
+        log.error("Failed to save uploaded file", extra={"upload_filename": original_filename,
                                                           "error": str(exc)})
         return JSONResponse(status_code=500,
                             content={"error": "File could not be saved. Please try again."})
 
+    log.info("File saved", extra={"upload_filename": original_filename,
+                                   "stored_as": safe_name,
+                                   "size_bytes": len(contents),
+                                   "mime": detected_mime})
+
+    # ── Extract text (using safe_name path, extension already validated) ──────────
     extracted_text = ""
 
-    if file.filename.endswith(".txt"):
+    if file_ext == ".txt":
         try:
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                extracted_text = f.read()
-        except OSError as exc:
-            log.error("Failed to read txt file", extra={"upload_filename": file.filename,
-                                                         "error": str(exc)})
+            extracted_text = contents.decode("utf-8", errors="ignore")
+        except Exception as exc:
+            log.error("Failed to decode txt file", extra={"upload_filename": original_filename,
+                                                           "error": str(exc)})
             return JSONResponse(status_code=500,
                                 content={"error": "Could not read the uploaded file."})
 
-    elif file.filename.endswith(".pdf"):
+    elif file_ext == ".pdf":
         try:
             doc = fitz.open(str(file_path))
             for page in doc:
                 extracted_text += page.get_text()
             doc.close()
         except Exception as exc:
-            log.error("Failed to parse PDF", extra={"upload_filename": file.filename,
+            log.error("Failed to parse PDF", extra={"upload_filename": original_filename,
                                                       "error": str(exc)})
             extracted_text = "Could not extract text from the PDF."
 
-    elif file.filename.endswith(".docx"):
+    elif file_ext == ".docx":
         try:
             doc = Document(str(file_path))
             extracted_text = "\n".join([para.text for para in doc.paragraphs])
         except Exception as exc:
-            log.error("Failed to parse DOCX", extra={"upload_filename": file.filename,
+            log.error("Failed to parse DOCX", extra={"upload_filename": original_filename,
                                                        "error": str(exc)})
             extracted_text = "Could not extract text from the document."
 
-    log.info("File processed successfully", extra={"upload_filename": file.filename,
+    log.info("File processed successfully", extra={"upload_filename": original_filename,
                                                     "chars_extracted": len(extracted_text)})
-    return {"filename": file.filename, "extracted_text": extracted_text}
+    # Return original filename to the client (UX), not the internal UUID name
+    return {"filename": original_filename, "extracted_text": extracted_text}
 
 
 @app.post("/chat")

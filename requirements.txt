@@ -7,3 +7,4 @@ python-docx
 python-dotenv
 python-jose[cryptography]
 slowapi
+python-magic-bin
