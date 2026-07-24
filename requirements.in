@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-multipart
+requests
+PyMuPDF
+python-docx
+python-dotenv
+PyJWT[cryptography]
+slowapi
+python-magic-bin

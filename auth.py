@@ -9,7 +9,8 @@ Phase 2 hardening:
 
 from datetime import datetime, timedelta, timezone
 
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import InvalidTokenError
 # pyrefly: ignore [missing-import]
 from fastapi import Depends, HTTPException, status
 # pyrefly: ignore [missing-import]
@@ -61,6 +62,6 @@ def verify_token(
             raise credentials_exception
         log.info("Token verified", extra={"subject": subject})
         return subject
-    except JWTError as exc:
+    except InvalidTokenError as exc:
         log.warning("JWT validation failed", extra={"reason": str(exc)})
         raise credentials_exception

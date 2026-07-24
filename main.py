@@ -89,7 +89,7 @@ from ai_firewall import (
     wrap_document_context,
     sanitize_output,
 )
-from logger import log
+from logger import log, audit_log, security_event
 from auth import create_access_token, verify_token
 
 # ── Rate limiter ───────────────────────────────────────────────────────────────
@@ -199,6 +199,12 @@ async def login(request: Request, username: str = Form(...), password: str = For
     """
     if username != APP_USERNAME or password != APP_PASSWORD:
         log.warning("Failed login attempt", extra={"username": username})
+        security_event(
+            "auth_failure",
+            severity="HIGH",
+            username=username,
+            ip=request.client.host if request.client else "unknown",
+        )
         from fastapi import HTTPException, status
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -206,7 +212,9 @@ async def login(request: Request, username: str = Form(...), password: str = For
             headers={"WWW-Authenticate": "Bearer"},
         )
     token = create_access_token(subject=username)
-    log.info("Successful login", extra={"username": username})
+    audit_log("login", user=username,
+              ip=request.client.host if request.client else "unknown",
+              result="success")
     return {"access_token": token, "token_type": "bearer"}
 
 
@@ -227,6 +235,13 @@ async def upload_file(
     if file_ext not in ALLOWED_EXTENSIONS:
         log.warning("Upload rejected: disallowed extension",
                     extra={"upload_filename": original_filename, "extension": file_ext})
+        security_event(
+            "disallowed_extension",
+            severity="MEDIUM",
+            user=current_user,
+            filename=original_filename,
+            extension=file_ext,
+        )
         return JSONResponse(
             status_code=400,
             content={"error": f"Unsupported file type '{file_ext}'. "
@@ -242,6 +257,13 @@ async def upload_file(
                     extra={"upload_filename": original_filename,
                            "size_bytes": len(contents),
                            "limit_bytes": MAX_UPLOAD_SIZE_BYTES})
+        security_event(
+            "oversized_upload",
+            severity="LOW",
+            user=current_user,
+            filename=original_filename,
+            size_bytes=len(contents),
+        )
         return JSONResponse(
             status_code=413,
             content={"error": f"File too large. Maximum allowed size is "
@@ -254,6 +276,13 @@ async def upload_file(
         log.warning("Upload rejected: disallowed MIME type",
                     extra={"upload_filename": original_filename,
                            "detected_mime": detected_mime})
+        security_event(
+            "mime_mismatch",
+            severity="HIGH",
+            user=current_user,
+            filename=original_filename,
+            detected_mime=detected_mime,
+        )
         return JSONResponse(
             status_code=400,
             content={"error": f"Invalid file content (detected: '{detected_mime}'). "
@@ -339,8 +368,11 @@ async def upload_file(
         # Wrap extracted text in delimiters for context isolation
         extracted_text = wrap_document_context(extracted_text)
 
-    log.info("File processed successfully", extra={"upload_filename": original_filename,
+        log.info("File processed successfully", extra={"upload_filename": original_filename,
                                                     "chars_extracted": len(extracted_text)})
+    audit_log("upload", user=current_user,
+              filename=original_filename, stored_as=safe_name,
+              size_bytes=len(contents), mime=detected_mime)
     # Return original filename to the client (UX), not the internal UUID name
     return {"filename": original_filename, "extracted_text": extracted_text}
 
@@ -378,6 +410,13 @@ async def chat_endpoint(
                     log.warning(
                         "Direct injection attempt blocked",
                         extra={"user": current_user, "pattern": pattern_label},
+                    )
+                    security_event(
+                        "injection_attempt",
+                        severity="HIGH",
+                        user=current_user,
+                        pattern=pattern_label,
+                        ip=request.client.host if request.client else "unknown",
                     )
                     return JSONResponse(
                         status_code=400,
@@ -430,6 +469,9 @@ async def chat_endpoint(
         ai_content = html.escape(ai_content)
 
         result["message"]["content"] = ai_content
+        audit_log("chat", user=current_user,
+                  message_count=len(messages),
+                  response_chars=len(ai_content))
         log.info("Ollama response received", extra={"status_code": response.status_code})
         return result
 

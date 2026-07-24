@@ -46,6 +46,9 @@ APP_PASSWORD: str = os.getenv("APP_PASSWORD", "")
 # ── Logging ────────────────────────────────────────────────────────────────────
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
 
+# Optional path for rotating log file (leave empty to log to console only)
+LOG_FILE: str = os.getenv("LOG_FILE", "")
+
 # ── Phase 3: Abuse Prevention ──────────────────────────────────────────────────
 # Rate limits (slowapi format: "N/period")
 RATE_LIMIT_CHAT: str  = os.getenv("RATE_LIMIT_CHAT",  "10/minute")
