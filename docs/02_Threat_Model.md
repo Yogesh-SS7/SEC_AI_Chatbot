@@ -1,7 +1,7 @@
 # Threat Model — Orion AI Assistant
 
 ## Executive Summary
-This document outlines the threat model for the Orion AI Assistant (`SEC_AI_Chatbot`), a local enterprise AI chat application built on FastAPI and Ollama. By analyzing the system's architecture, data flows, and trust boundaries, we identify the primary attack surfaces and potential threat actors. This model prioritizes risks based on the OWASP Top 10 for Web and LLM Applications to inform the subsequent security hardening phases.
+This document outlines the threat model for the Orion AI Assistant (`SEC_AI_Chatbot`), a local enterprise AI chat application built on FastAPI and Ollama. This document analyzes the system's architecture, data flows, and trust boundaries to identify primary attack surfaces and potential threat actors. This model prioritizes risks based on the OWASP Top 10 for Web and LLM Applications to inform the subsequent security hardening phases.
 
 ## System Overview
 The Orion AI Assistant allows internal employees to authenticate, upload documents (e.g., PDF, DOCX, TXT), and interact with a local Llama 3.2 model via a chat interface. The system comprises a frontend browser client, a FastAPI backend, and a locally hosted Ollama inference engine.

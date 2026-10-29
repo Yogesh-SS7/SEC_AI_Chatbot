@@ -27,7 +27,7 @@ UPLOAD_DIR: Path = (BASE_DIR / _raw_upload_dir).resolve()
 
 # ── Ollama / AI ────────────────────────────────────────────────────────────────
 OLLAMA_URL: str = os.getenv("OLLAMA_URL", "http://localhost:11434/api/chat")
-MODEL_NAME: str = os.getenv("MODEL_NAME", "llama3.2")
+MODEL_NAME: str = os.getenv("MODEL_NAME", "llama3.1:8b")
 ACTIVE_PROMPT_FILE: str = os.getenv("ACTIVE_PROMPT_FILE", "secure_system_prompt.txt")
 
 # ── Server ─────────────────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 
 ## Testing Overview
 
-This document serves as the **evidence log** for the Orion AI Assistant (`SEC_AI_Chatbot`). It consolidates all security testing, validation, and verification activities performed throughout the project's development. Our security testing strategy was heavily iterative, ensuring that every layer of defense was verified individually before integration. 
+This document serves as the **evidence log** for the Orion AI Assistant (`SEC_AI_Chatbot`). It consolidates all security testing, validation, and verification activities performed throughout the project's development. The security testing strategy was iterative, ensuring that every layer of defense was verified individually before integration. 
 
 Testing was performed continuously across the following stages:
 - **Initial assessment:** Establishing the vulnerable baseline.
@@ -140,6 +140,6 @@ The following testing scenarios were out of scope for this phase and require fut
 
 ## Conclusion
 
-The testing effort for the Orion AI Assistant utilized an iterative, defense-in-depth approach. By verifying security controls immediately after implementation during each of the 7 phases, we ensured functional stability while drastically reducing the attack surface. 
+The testing effort for the Orion AI Assistant utilized an iterative, defense-in-depth approach. By verifying security controls immediately after implementation during each of the 7 phases, functional stability was maintained while drastically reducing the attack surface. 
 
 The combination of manual adversarial testing (for semantic LLM attacks) and automated scanning (for dependencies and static code) successfully validated that the application has transitioned from a highly vulnerable baseline to a robust, secure architecture capable of safely processing enterprise data.

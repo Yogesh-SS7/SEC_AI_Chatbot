@@ -30,7 +30,8 @@ _INJECTION_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\byou\s+are\s+now\b", re.I), "role_injection"),
     (re.compile(r"\bact\s+as\s+(a\s+|an\s+)?(new|different|unrestricted|evil|hacked|jailbroken|DAN)", re.I), "persona_injection"),
     (re.compile(r"\bpretend\s+(you\s+are|to\s+be)\b", re.I), "pretend_persona"),
-    (re.compile(r"\bdeveloper\s+mode\b", re.I), "developer_mode"),
+    (re.compile(r"\b(developer|debug)\s+mode\b", re.I), "developer_or_debug_mode"),
+    (re.compile(r"\b(enter|enable)\s+debug\b", re.I), "enter_debug_mode"),
     (re.compile(r"\bDAN\b", re.I), "dan_jailbreak"),
     (re.compile(r"\bjailbreak\b", re.I), "jailbreak"),
     (re.compile(r"\bunrestricted\s+(mode|AI|assistant|version)\b", re.I), "unrestricted_mode"),
@@ -79,6 +80,8 @@ _LEAKAGE_SIGNALS: list[re.Pattern] = [
     re.compile(r"ACTIVE_PROMPT_FILE", re.I),
     re.compile(r"JWT_SECRET_KEY", re.I),
     re.compile(r"APP_PASSWORD", re.I),
+    re.compile(r"CANARY-SYS-7731", re.I),
+    re.compile(r"CANARY-KEY-9915", re.I),
 ]
 
 # Simple HTML/script tag pattern for output sanitization

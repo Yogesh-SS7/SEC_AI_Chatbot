@@ -11,6 +11,7 @@ __pycache__/
 dist/
 build/
 .eggs/
+.pytest_cache/
 
 # Virtual environments
 venv/
@@ -29,3 +30,8 @@ uploads/
 Thumbs.db
 
 logs/
+test_progress.json
+tests/test_progress.json
+summary.txt
+
+EXP.Md

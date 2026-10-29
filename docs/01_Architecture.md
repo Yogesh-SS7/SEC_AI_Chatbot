@@ -134,7 +134,7 @@ SEC_AI_Chatbot/
 
 1. **Local Inference (Ollama):** Chosen over cloud APIs (OpenAI/Anthropic) to guarantee zero data exfiltration of internal enterprise documents.
 2. **UUID File Storage:** Original filenames are discarded immediately upon upload to eliminate path traversal (`../`) and arbitrary file overwrite attacks.
-3. **Regex-based Firewall:** We opted for a lightweight, regex-based heuristic firewall instead of an LLM-based classifier. This prioritizes latency and resource consumption over perfect zero-day attack detection.
+3. **Regex-based Firewall:** A lightweight, regex-based heuristic firewall was selected over an LLM-based classifier to prioritize low latency and minimal resource overhead.
 4. **Pinned Dependencies:** `pip-tools` is used instead of standard `pip freeze` to separate top-level intent (`requirements.in`) from the rigid lockfile (`requirements.txt`), defending against supply chain poisoning.
 
 ---
